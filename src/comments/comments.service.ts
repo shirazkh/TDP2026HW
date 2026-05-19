@@ -11,6 +11,7 @@ import { UsersService } from '../users/users.service';
 import { Comment } from './comment.entity';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { MentionParserService } from './mention-parser.service';
 
 @Injectable()
 export class CommentsService {
@@ -20,6 +21,7 @@ export class CommentsService {
     private readonly ticketsService: TicketsService,
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly mentionParserService: MentionParserService,
   ) {}
 
   async findByTicket(ticketId: number): Promise<Comment[]> {
@@ -46,6 +48,9 @@ export class CommentsService {
     });
 
     const savedComment = await this.commentsRepository.save(comment);
+    const mentionedUsernames = this.mentionParserService.extractUsernames(
+      input.content,
+    );
 
     await this.auditLogsService.record({
       action: AuditAction.CREATE,
@@ -53,7 +58,11 @@ export class CommentsService {
       entityId: savedComment.id,
       actor: AuditActor.USER,
       performedById: actor.id,
-      metadata: { ticketId, authorId: savedComment.authorId },
+      metadata: {
+        ticketId,
+        authorId: savedComment.authorId,
+        mentionedUsernames,
+      },
     });
 
     return savedComment;
@@ -75,7 +84,7 @@ export class CommentsService {
 
     const result = await this.commentsRepository.update(
       { id: commentId, ticketId, version: input.version },
-      { content: input.content },
+      { content: input.content, version: input.version + 1 },
     );
 
     if (!result.affected) {
@@ -90,7 +99,13 @@ export class CommentsService {
       entityId: commentId,
       actor: AuditActor.USER,
       performedById: actor.id,
-      metadata: { ticketId, updatedFields: ['content'] },
+      metadata: {
+        ticketId,
+        updatedFields: ['content'],
+        mentionedUsernames: this.mentionParserService.extractUsernames(
+          input.content,
+        ),
+      },
     });
   }
 

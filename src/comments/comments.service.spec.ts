@@ -33,6 +33,7 @@ describe('CommentsService', () => {
       { findById: jest.fn().mockResolvedValue({ id: 10 }) } as any,
       { findById: jest.fn().mockResolvedValue({ id: 2 }) } as any,
       { record: jest.fn().mockResolvedValue({}) } as any,
+      { extractUsernames: jest.fn().mockReturnValue(['jdoe']) } as any,
     );
 
     return { service, commentsRepository };
@@ -63,7 +64,7 @@ describe('CommentsService', () => {
 
     expect(commentsRepository.update).toHaveBeenCalledWith(
       { id: 1, ticketId: 10, version: 5 },
-      { content: 'Updated comment' },
+      { content: 'Updated comment', version: 6 },
     );
   });
 });

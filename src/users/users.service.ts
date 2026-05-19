@@ -6,6 +6,7 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../common/enums/audit-action.enum';
 import { AuditActor } from '../common/enums/audit-actor.enum';
 import { AuditEntityType } from '../common/enums/audit-entity-type.enum';
+import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import {
   BCRYPT_SALT_ROUNDS,
@@ -53,6 +54,13 @@ export class UsersService {
 
   findAll(): Promise<User[]> {
     return this.usersRepository.find({
+      order: { id: 'ASC' },
+    });
+  }
+
+  findDevelopers(): Promise<User[]> {
+    return this.usersRepository.find({
+      where: { role: UserRole.DEVELOPER },
       order: { id: 'ASC' },
     });
   }

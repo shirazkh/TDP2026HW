@@ -5,17 +5,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { MentionParserService } from '../comments/mention-parser.service';
 import { AuditAction } from '../common/enums/audit-action.enum';
 import { AuditActor } from '../common/enums/audit-actor.enum';
 import { AuditEntityType } from '../common/enums/audit-entity-type.enum';
+import { TicketPriority } from '../common/enums/ticket-priority.enum';
 import { TicketStatus } from '../common/enums/ticket-status.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ProjectsService } from '../projects/projects.service';
 import { UsersService } from '../users/users.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { TicketDependency } from './ticket-dependency.entity';
 import { Ticket } from './ticket.entity';
 
 @Injectable()
@@ -23,9 +26,12 @@ export class TicketsService {
   constructor(
     @InjectRepository(Ticket)
     private readonly ticketsRepository: Repository<Ticket>,
+    @InjectRepository(TicketDependency)
+    private readonly ticketDependenciesRepository: Repository<TicketDependency>,
     private readonly projectsService: ProjectsService,
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly mentionParserService: MentionParserService,
   ) {}
 
   async findByProject(projectId: number): Promise<Ticket[]> {
@@ -65,7 +71,12 @@ export class TicketsService {
       entityId: savedTicket.id,
       actor: AuditActor.USER,
       performedById: actor.id,
-      metadata: { projectId: savedTicket.projectId },
+      metadata: {
+        projectId: savedTicket.projectId,
+        mentionedUsernames: this.mentionParserService.extractUsernames(
+          savedTicket.description,
+        ),
+      },
     });
 
     return savedTicket;
@@ -81,6 +92,7 @@ export class TicketsService {
     this.ensureMutable(ticket);
     this.ensureVersionMatches(ticket, input.version);
     this.validateStatusTransition(ticket.status, input.status);
+    await this.ensureNoUnresolvedBlockersForDone(ticket, input.status);
 
     const updatePayload: Partial<Ticket> = {};
 
@@ -109,9 +121,16 @@ export class TicketsService {
       updatePayload.dueDate = input.dueDate ? new Date(input.dueDate) : null;
     }
 
+    const autoAssignedUserId = await this.applyAutoAssignmentIfNeeded(
+      ticket,
+      updatePayload,
+    );
+
     if (Object.keys(updatePayload).length === 0) {
       return;
     }
+
+    updatePayload.version = input.version + 1;
 
     const result = await this.ticketsRepository.update(
       { id, version: input.version },
@@ -130,8 +149,29 @@ export class TicketsService {
       entityId: id,
       actor: AuditActor.USER,
       performedById: actor.id,
-      metadata: { updatedFields: Object.keys(updatePayload) },
+      metadata: {
+        updatedFields: Object.keys(updatePayload).filter(
+          (field) => field !== 'version',
+        ),
+        mentionedUsernames: this.mentionParserService.extractUsernames(
+          updatePayload.description ?? ticket.description,
+        ),
+      },
     });
+
+    if (autoAssignedUserId !== null) {
+      await this.auditLogsService.record({
+        action: AuditAction.AUTO_ASSIGN,
+        entityType: AuditEntityType.TICKET,
+        entityId: id,
+        actor: AuditActor.SYSTEM,
+        performedById: null,
+        metadata: {
+          assignedUserId: autoAssignedUserId,
+          reason: 'Ticket transitioned to IN_PROGRESS without an assignee',
+        },
+      });
+    }
   }
 
   async softDelete(id: number, actor: RequestUser): Promise<void> {
@@ -199,6 +239,117 @@ export class TicketsService {
       throw new BadRequestException(
         `Invalid ticket status transition from ${currentStatus} to ${nextStatus}`,
       );
+    }
+  }
+
+  private async ensureNoUnresolvedBlockersForDone(
+    ticket: Ticket,
+    nextStatus?: TicketStatus,
+  ): Promise<void> {
+    if (nextStatus !== TicketStatus.DONE) {
+      return;
+    }
+
+    const dependencies = await this.ticketDependenciesRepository.find({
+      where: { ticketId: ticket.id },
+      relations: { blockedByTicket: true },
+    });
+    const unresolvedBlockers = dependencies.filter(
+      (dependency) =>
+        dependency.blockedByTicket &&
+        dependency.blockedByTicket.status !== TicketStatus.DONE,
+    );
+
+    if (unresolvedBlockers.length > 0) {
+      throw new BadRequestException(
+        `Ticket ${ticket.id} cannot transition to DONE while blocked by unresolved tickets: ${unresolvedBlockers
+          .map((dependency) => dependency.blockedByTicketId)
+          .join(', ')}`,
+      );
+    }
+  }
+
+  private async applyAutoAssignmentIfNeeded(
+    ticket: Ticket,
+    updatePayload: Partial<Ticket>,
+  ): Promise<number | null> {
+    if (
+      updatePayload.status !== TicketStatus.IN_PROGRESS ||
+      (updatePayload.assigneeId ?? ticket.assigneeId) !== null
+    ) {
+      return null;
+    }
+
+    const assigneeId = await this.findLeastLoadedDeveloperId(ticket.projectId);
+
+    if (assigneeId === null) {
+      return null;
+    }
+
+    updatePayload.assigneeId = assigneeId;
+
+    return assigneeId;
+  }
+
+  private async findLeastLoadedDeveloperId(
+    projectId: number,
+  ): Promise<number | null> {
+    const developers = await this.usersService.findDevelopers();
+
+    if (developers.length === 0) {
+      return null;
+    }
+
+    const developerIds = developers.map((developer) => developer.id);
+    const activeTickets = await this.ticketsRepository.find({
+      where: {
+        projectId,
+        assigneeId: In(developerIds),
+        status: Not(TicketStatus.DONE),
+      },
+      select: {
+        id: true,
+        assigneeId: true,
+      },
+    });
+    const workloadByDeveloperId = new Map<number, number>();
+
+    for (const developer of developers) {
+      workloadByDeveloperId.set(developer.id, 0);
+    }
+
+    for (const activeTicket of activeTickets) {
+      if (activeTicket.assigneeId !== null) {
+        workloadByDeveloperId.set(
+          activeTicket.assigneeId,
+          (workloadByDeveloperId.get(activeTicket.assigneeId) ?? 0) + 1,
+        );
+      }
+    }
+
+    return developers.reduce((leastLoadedDeveloper, developer) => {
+      const currentWorkload = workloadByDeveloperId.get(developer.id) ?? 0;
+      const leastWorkload =
+        workloadByDeveloperId.get(leastLoadedDeveloper.id) ?? 0;
+
+      if (currentWorkload < leastWorkload) {
+        return developer;
+      }
+
+      return leastLoadedDeveloper;
+    }).id;
+  }
+
+  getNextEscalatedPriority(priority: TicketPriority): TicketPriority {
+    switch (priority) {
+      case TicketPriority.LOW:
+        return TicketPriority.MEDIUM;
+      case TicketPriority.MEDIUM:
+        return TicketPriority.HIGH;
+      case TicketPriority.HIGH:
+        return TicketPriority.CRITICAL;
+      case TicketPriority.CRITICAL:
+        return TicketPriority.CRITICAL;
     }
   }
 }
