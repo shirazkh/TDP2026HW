@@ -500,24 +500,53 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 ### Prompt(s)
 
-- TODO: Add the user's Phase 6 execution prompt here.
+- Execute Phase 6: Testing and Documentation exactly as outlined in `DEVELOPMENT_PLAN.md`.
+- Run the full test suite and ensure there are no regressions.
+- Confirm that focused tests cover the rule preventing transition to `DONE` with unresolved blockers.
+- Create a comprehensive `run.md` guide for evaluators with prerequisites, local setup, database startup, application startup, test commands, and table inspection tips.
+- Finalize `prompts.md` as a complete development journey record and replace all remaining template entries.
+- Merge final changes back into `main` and push the repository for submission readiness.
 
 ### Implementation Summary
 
-- TODO: Summarize final tests, `run.md`, README updates if any, and final prompt documentation updates.
+- Added `run.md` at the repository root with evaluator-focused setup, run, test, and database verification instructions.
+- Documented prerequisites including Node.js, npm, Docker, Docker Compose, and Git.
+- Documented local setup with `npm install`, `.env` creation from `.env.example`, and PostgreSQL startup through `docker compose up -d db`.
+- Documented application startup with `npm run start:dev`.
+- Documented test and build commands with `npm test`, `npm test -- --runInBand`, and `npm run build`.
+- Documented database inspection commands using `docker compose exec db psql`.
+- Documented important generated columns and tables, including optimistic-locking columns, soft-delete columns, audit logs, and revoked tokens.
+- Documented the assignment-specific default password behavior for users created without a password.
+- Finalized this `prompts.md` Phase 6 section and replaced the remaining template text with final documentation.
 
 ### Files Changed
 
-- TODO: List files created or modified.
+- `run.md`
+- `prompts.md`
 
 ### Business Rules Covered
 
-- TODO: List constraints verified or documented during this phase.
+- Final test verification includes the focused service test proving a ticket cannot transition to `DONE` while unresolved blockers exist.
+- Final test verification includes ticket optimistic-locking conflict coverage.
+- Final test verification includes comment optimistic-locking conflict coverage.
+- Final test verification includes `DONE` ticket immutability coverage.
+- Final test verification includes illegal ticket status transition coverage.
+- Final test verification includes SYSTEM actor audit coverage for auto-assignment and auto-escalation behavior.
+- Documentation explains how to verify database-generated tables and important persistence columns.
+- Documentation explains how to run the application and tests from a clean checkout.
 
 ### Verification
 
-- TODO: List commands/tests run and results.
+- Final verification commands:
+  - `npm run build`
+  - `npm test -- --runInBand`
+- Both commands passed during Phase 6.
+- Test suite coverage at final verification:
+  - 5 test suites passed.
+  - 12 tests passed.
 
 ### Follow-ups
 
-- TODO: List unresolved items, residual risks, or final submission notes.
+- Repository is ready for evaluator pull and local execution using `run.md`.
+- Remaining extended PDF features not implemented in this scoped build are documented in Phase 5 follow-ups: persisted mention associations, full dependency management endpoints, attachments, CSV import/export, and soft-delete restore endpoints.
+- The assignment-compatible default password fallback remains documented as non-production behavior.
