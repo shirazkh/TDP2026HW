@@ -1,0 +1,191 @@
+# IssueFlow Cursor Rules
+
+These rules are derived from the IssueFlow requirements PDF and the approved `DEVELOPMENT_PLAN.md`. Treat the README API table as the external contract and the PDF as the business-rule authority.
+
+## Project Architecture
+
+- Build the backend as a NestJS 10+ TypeScript application using TypeORM and PostgreSQL.
+- Keep controllers thin. Controllers should handle routing, guards, request DTOs, and response DTOs only.
+- Put business behavior in services, not controllers or entities.
+- Use modules that match domain boundaries:
+  - `auth`
+  - `users`
+  - `projects`
+  - `tickets`
+  - `comments`
+  - `audit-logs`
+  - `attachments`
+  - shared `common` and `config`
+- Prefer explicit service methods for domain rules such as ticket transitions, concurrency checks, mention synchronization, auto-assignment, and escalation.
+- Use TypeORM repositories and transactions for operations that update multiple records or must write audit logs atomically.
+- Do not add unrelated abstractions or frameworks outside the approved NestJS/TypeORM/PostgreSQL approach.
+
+## Code Style and Formatting
+
+- Write TypeScript with strict, explicit types for DTOs, services, and entity relationships.
+- Use ASCII text in source and documentation unless a file already requires otherwise.
+- Use class-validator DTOs for request validation.
+- Use response DTOs or explicit mapping methods so API responses match README examples.
+- Keep naming consistent with NestJS conventions:
+  - `*.module.ts`
+  - `*.controller.ts`
+  - `*.service.ts`
+  - `*.entity.ts`
+  - `dto/*.dto.ts`
+  - `*.spec.ts`
+- Keep comments rare and meaningful. Add comments only for non-obvious business logic.
+- Prefer structured libraries and framework features over ad hoc parsing or string manipulation.
+
+## Persistence and Entity Rules
+
+- Configure TypeORM through NestJS module configuration and PostgreSQL settings that match `compose.yml` by default.
+- Required domain entities include users, projects, tickets, comments, comment mentions, audit logs, ticket dependencies, and attachments.
+- Add optimistic-locking/version fields for tickets and comments.
+- Add soft-delete support for tickets and projects.
+- Add ticket due-date and overdue fields:
+  - `dueDate`
+  - `isOverdue`
+- Use enums for constrained values:
+  - User role: `ADMIN`, `DEVELOPER`
+  - Ticket status: `TODO`, `IN_PROGRESS`, `IN_REVIEW`, `DONE`
+  - Ticket priority: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`
+  - Ticket type: `BUG`, `FEATURE`, `TECHNICAL`
+- Reject invalid enum values through DTO validation before they reach business logic.
+
+## Authentication and Authorization Rules
+
+- Protect all API endpoints with JWT authentication unless an endpoint is explicitly public, such as login or approved bootstrapping behavior.
+- Implement:
+  - `POST /auth/login`
+  - `POST /auth/logout`
+  - `GET /auth/me`
+- Logout must invalidate the current token through a deny-list or another documented expiry strategy.
+- Add role-based authorization for ADMIN-only endpoints.
+- Deleted-record listing and restore endpoints must be ADMIN-only.
+- Resolve and document the credential model because login requires a password while the user creation example omits one.
+
+## Core API Rules
+
+- Implement endpoints according to the README API table.
+- Use informative HTTP errors for invalid input, missing records, authorization failures, and business-rule violations.
+- Standard project and ticket reads must hide soft-deleted records.
+- Projects and tickets must not expose hard-delete behavior through the API.
+- Ticket list endpoints must scope results to the requested project.
+- Comments must belong to exactly one ticket and one author.
+- Tickets must belong to exactly one project.
+
+## Ticket State Machine Rules
+
+- Ticket status progression is strictly forward-only:
+  - `TODO -> IN_PROGRESS -> IN_REVIEW -> DONE`
+- Reject backward transitions.
+- Reject any status change that does not move forward within the documented lifecycle order.
+- Reject updates to tickets already in `DONE`.
+- Before moving a ticket to `DONE`, verify it has no unresolved blocker tickets.
+- Escalation must never change ticket status.
+
+## Concurrency Rules
+
+- Tickets must use optimistic locking so simultaneous updates cannot silently overwrite each other.
+- Comments must use optimistic locking so simultaneous edits cannot silently overwrite each other.
+- Update DTOs for tickets and comments must include, or otherwise enforce, expected version information.
+- Stale versions must return an informative conflict error.
+- Do not bypass version checks in service methods that mutate tickets or comments.
+
+## Audit Log Rules
+
+- Audit logs are append-only.
+- Record every state-changing action, including:
+  - Manual user actions.
+  - System actions such as auto-assignment and auto-escalation.
+- Audit log records must capture action, entity type, entity ID, actor type, performer when applicable, and timestamp.
+- Use actor `USER` for authenticated user actions and `SYSTEM` for automated actions.
+- Write audit logs in the same transaction as the state change whenever practical.
+- Implement `GET /audit-logs` with filters for `entityType`, `entityId`, `action`, and `actor`.
+
+## Extended Feature Rules
+
+### Ticket Dependencies
+
+- `POST /tickets/:ticketId/dependencies` adds a blocker relationship.
+- `GET /tickets/:ticketId/dependencies` lists blocker tickets.
+- `DELETE /tickets/:ticketId/dependencies/:blockerId` removes a blocker relationship.
+- Both tickets in a dependency must exist and belong to the same project.
+- A ticket cannot transition to `DONE` while it has unresolved blockers.
+
+### Attachments
+
+- Enforce maximum upload size of 10 MB.
+- Allow only:
+  - `image/png`
+  - `image/jpeg`
+  - `application/pdf`
+  - `text/plain`
+- Reject all other content types.
+- Persist enough attachment metadata to satisfy the response contract.
+
+### CSV Import and Export
+
+- Use CSV libraries for parsing/stringifying.
+- Export fields: `id`, `title`, `description`, `status`, `priority`, `type`, `assigneeId`.
+- Import must handle commas and quotes inside field values correctly.
+- Import must return `{ created, failed, errors }`.
+
+### Mentions
+
+- Detect `@username` mentions in comments.
+- Match usernames case-insensitively.
+- Persist mention associations.
+- Include `mentionedUsers: [{ id, username, fullName }]` in comment responses.
+- Re-evaluate mentions on comment update:
+  - Create newly added mentions.
+  - Remove deleted mentions.
+- `GET /users/:userId/mentions` must return newest comments first.
+
+### Auto-Escalation
+
+- Ticket create and update accept optional `dueDate`.
+- Escalation applies only to unresolved tickets with `dueDate` set.
+- Promotion order is:
+  - `LOW -> MEDIUM -> HIGH -> CRITICAL`
+- Once a ticket is `CRITICAL`, escalation is idempotent and must not promote further.
+- A still-overdue `CRITICAL` ticket must expose `isOverdue = true`.
+- Manual priority changes clear `isOverdue` and reset auto-escalation state.
+- Escalation modifies priority and overdue state only; it must not modify ticket status.
+- Record auto-escalation in the audit log with actor `SYSTEM`.
+
+### Auto-Assignment and Workload
+
+- Auto-assignment runs only on ticket creation when `assigneeId` is absent.
+- Only `DEVELOPER` users are eligible.
+- Exclude `ADMIN` users from auto-assignment candidates.
+- Workload is the count of non-`DONE` tickets assigned to each developer within the same project.
+- Choose the lowest workload developer.
+- Break ties by oldest user registration first.
+- If no eligible or project-linked developer exists, create the ticket unassigned.
+- Explicit `assigneeId` on ticket update overrides prior auto-assignment.
+- Record auto-assignment in the audit log with actor `SYSTEM` and action `AUTO_ASSIGN`.
+- Implement `GET /projects/:projectId/workload`.
+- Resolve and document how "users linked to the project" are represented, because the README does not define a project-membership API.
+
+## Testing Rules
+
+- Add tests proportionally to implementation risk.
+- High-risk behavior requires focused tests:
+  - Invalid enum rejection.
+  - Ticket forward-only transitions.
+  - Rejection of updates after `DONE`.
+  - Optimistic-lock conflict handling for tickets.
+  - Optimistic-lock conflict handling for comments.
+  - Dependency blocking before `DONE`.
+  - Mention parsing and synchronization.
+  - Auto-assignment workload selection and tie-breaking.
+  - Auto-escalation idempotency and manual reset.
+  - ADMIN-only deleted and restore endpoints.
+- Keep e2e tests aligned with README API paths and response shapes.
+
+## Documentation Rules
+
+- Maintain `run.md` with exact install, database, build, run, and test steps.
+- Maintain `prompts.md` with the model used, prompts, methodology, phase outcomes, and notable decisions.
+- Update documentation when implementation decisions resolve ambiguities from the requirements.
