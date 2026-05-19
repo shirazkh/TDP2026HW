@@ -395,7 +395,6 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 - `npm run build` passed.
 - `npm test -- --runInBand` passed.
-- Local verification was completed by the project owner: Phase 5 compiled with 0 errors, including blockers, mentions, auto-assignment, and the auto-escalation worker.
 - Focused tests added and passing:
   - Ticket stale-version update conflict.
   - Ticket `DONE` immutability.
@@ -481,6 +480,7 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 - `npm run build` passed.
 - `npm test -- --runInBand` passed.
+- Local verification was completed by the project owner: Phase 5 compiled with 0 errors, including blockers, mentions, auto-assignment, and the auto-escalation worker.
 - Focused tests added and passing:
   - Case-insensitive mention extraction and de-duplication.
   - Blocked `DONE` transition rejection.
