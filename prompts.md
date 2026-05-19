@@ -112,11 +112,17 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 - `npm install --no-package-lock` completed successfully to install existing project dependencies in the cloud environment.
 - `npm run build` passed.
-- `docker compose up -d db` could not be run in this cloud image because `docker` is not installed.
+- Local verification was completed by the project owner after pulling the Phase 1 branch:
+  - `docker compose up -d db` started PostgreSQL successfully.
+  - `npm run start:dev` started the NestJS application successfully.
+  - TypeORM connected to PostgreSQL and generated the schema successfully.
+  - Core tables were verified in PostgreSQL, including `users`, `projects`, `tickets`, `comments`, `ticket_dependencies`, and `audit_logs`.
+  - `tickets.version` and `comments.version` were verified for optimistic-locking support.
+  - `tickets.deleted_at` and `projects.deleted_at` were verified for soft-delete support.
+- Phase 1 was approved after local database bootstrap verification.
 
 ### Follow-ups
 
-- Run the live PostgreSQL startup verification in an environment with Docker available.
 - Implement service-level optimistic-lock checks when ticket and comment update endpoints are added.
 - Resolve the credential model during Phase 2 because the auth API requires a password but the README user creation example does not include one.
 
