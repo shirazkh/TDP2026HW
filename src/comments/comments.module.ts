@@ -6,6 +6,7 @@ import { UsersModule } from '../users/users.module';
 import { Comment } from './comment.entity';
 import { CommentsController } from './comments.controller';
 import { CommentsService } from './comments.service';
+import { MentionParserService } from './mention-parser.service';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { CommentsService } from './comments.service';
     UsersModule,
   ],
   controllers: [CommentsController],
-  providers: [CommentsService],
+  providers: [CommentsService, MentionParserService],
+  exports: [MentionParserService],
 })
 export class CommentsModule {}

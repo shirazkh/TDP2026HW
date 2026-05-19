@@ -395,6 +395,7 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 - `npm run build` passed.
 - `npm test -- --runInBand` passed.
+- Local verification was completed by the project owner: Phase 5 compiled with 0 errors, including blockers, mentions, auto-assignment, and the auto-escalation worker.
 - Focused tests added and passing:
   - Ticket stale-version update conflict.
   - Ticket `DONE` immutability.
@@ -413,27 +414,87 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 ### Prompt(s)
 
-- TODO: Add the user's Phase 5 execution prompt here.
+- Execute Phase 5: Extended Features exactly as detailed in `DEVELOPMENT_PLAN.md`.
+- Add blocker validation logic to `TicketsService` so tickets cannot transition to `DONE` while blocked by unresolved tickets.
+- Add case-insensitive mention extraction for `@username` patterns in ticket descriptions and comment text.
+- Document detected mentions through service audit metadata.
+- When a ticket transitions to `IN_PROGRESS` without an assignee, automatically assign it to the least-loaded developer candidate and record the action as `SYSTEM`.
+- Implement a simulated or scheduled worker/service function that finds overdue unresolved tickets, bumps priority, sets overdue state, never changes status, and records `SYSTEM` audit entries.
 
 ### Implementation Summary
 
-- TODO: Summarize dependencies, attachments, CSV import/export, soft-delete restore, mentions, auto-escalation, and auto-assignment.
+- Installed `@nestjs/schedule` and wired `ScheduleModule.forRoot()` in `AppModule`.
+- Added `MentionParserService` for case-insensitive `@username` extraction with duplicate normalization.
+- Added mention extraction to comment create/update audit metadata.
+- Added mention extraction to ticket create/update audit metadata.
+- Added unresolved dependency validation before a ticket can transition to `DONE`.
+- Added least-loaded developer auto-assignment when an unassigned ticket transitions to `IN_PROGRESS`.
+- Recorded auto-assignment audit entries with `actor = SYSTEM` and `action = AUTO_ASSIGN`.
+- Added `TicketEscalationService` with both scheduled execution and callable `escalateOverdueTickets` function for simulation/testing.
+- Implemented overdue ticket escalation for unresolved tickets with `dueDate` in the past.
+- Escalation promotes priority one level, sets `isOverdue = true`, records `actor = SYSTEM`, and preserves ticket status.
+- Added developer lookup support through `UsersService.findDevelopers`.
+- Because no project-membership API exists yet, auto-assignment uses all `DEVELOPER` users as the candidate pool and calculates workload only from non-`DONE` tickets within the target project.
 
 ### Files Changed
 
-- TODO: List files created or modified.
+- `package.json`
+- `package-lock.json`
+- `prompts.md`
+- `src/app.module.ts`
+- `src/users/users.service.ts`
+- `src/comments/comments.module.ts`
+- `src/comments/comments.service.ts`
+- `src/comments/comments.service.spec.ts`
+- `src/comments/mention-parser.service.ts`
+- `src/comments/mention-parser.service.spec.ts`
+- `src/tickets/tickets.module.ts`
+- `src/tickets/tickets.service.ts`
+- `src/tickets/tickets.service.spec.ts`
+- `src/tickets/ticket-escalation.service.ts`
+- `src/tickets/ticket-escalation.service.spec.ts`
 
 ### Business Rules Covered
 
-- TODO: List constraints implemented during this phase.
+- Tickets cannot transition to `DONE` if they have unresolved blocker tickets.
+- Unresolved blockers are blocker tickets whose status is not `DONE`.
+- Blocked `DONE` transitions throw `BadRequestException`.
+- Mentions are extracted from comments and ticket descriptions with case-insensitive normalization.
+- Mention metadata is captured in audit log metadata as `mentionedUsernames`.
+- Auto-assignment runs when a ticket transitions to `IN_PROGRESS` and has no assignee.
+- Auto-assignment chooses the `DEVELOPER` candidate with the lowest count of non-`DONE` tickets in the same project.
+- Auto-assignment ties are broken by user registration order because developers are sorted by ascending user ID.
+- If no developer candidates exist, the ticket remains unassigned.
+- Auto-assignment audit logs use `actor = SYSTEM`.
+- Auto-escalation only processes tickets with a past `dueDate` whose status is not `DONE`.
+- Auto-escalation promotes priority by one level:
+  - `LOW -> MEDIUM`
+  - `MEDIUM -> HIGH`
+  - `HIGH -> CRITICAL`
+  - `CRITICAL -> CRITICAL`
+- Auto-escalation sets `isOverdue = true`.
+- Auto-escalation never changes ticket status.
+- Auto-escalation audit logs use `actor = SYSTEM`.
+- Critical overdue tickets with `isOverdue = true` are idempotent and are not repeatedly audited.
 
 ### Verification
 
-- TODO: List commands/tests run and results.
+- `npm run build` passed.
+- `npm test -- --runInBand` passed.
+- Focused tests added and passing:
+  - Case-insensitive mention extraction and de-duplication.
+  - Blocked `DONE` transition rejection.
+  - Least-loaded developer auto-assignment on `IN_PROGRESS` transition.
+  - SYSTEM audit record for auto-assignment.
+  - Overdue priority escalation without status changes.
+  - Idempotent critical overdue escalation behavior.
 
 ### Follow-ups
 
-- TODO: List unresolved items or next-phase handoffs.
+- Persist full mention associations and implement `GET /users/:userId/mentions` if completing the full PDF mention feature.
+- Add ticket dependency management endpoints if completing the full ticket dependencies API.
+- Add attachment upload/delete, CSV import/export, and deleted/restore endpoints from the broader Phase 5 plan if required in the next iteration.
+- Replace the all-developers auto-assignment fallback with explicit project membership if a membership API/model is introduced.
 
 ## Phase 6: Testing and Documentation
 

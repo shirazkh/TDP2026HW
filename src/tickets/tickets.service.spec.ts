@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import { AuditAction } from '../common/enums/audit-action.enum';
 import { AuditActor } from '../common/enums/audit-actor.enum';
-import { AuditEntityType } from '../common/enums/audit-entity-type.enum';
 import { TicketPriority } from '../common/enums/ticket-priority.enum';
 import { TicketStatus } from '../common/enums/ticket-status.enum';
 import { TicketType } from '../common/enums/ticket-type.enum';
@@ -36,17 +36,36 @@ describe('TicketsService', () => {
   const createService = (ticket: Ticket) => {
     const ticketsRepository = {
       findOne: jest.fn().mockResolvedValue(ticket),
+      find: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       softDelete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
+    const ticketDependenciesRepository = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({ id: 2 }),
+      findDevelopers: jest.fn().mockResolvedValue([]),
+    };
+    const auditLogsService = {
+      record: jest.fn().mockResolvedValue({}),
+    };
     const service = new TicketsService(
       ticketsRepository as any,
+      ticketDependenciesRepository as any,
       { findById: jest.fn().mockResolvedValue({ id: 1 }) } as any,
-      { findById: jest.fn().mockResolvedValue({ id: 2 }) } as any,
-      { record: jest.fn().mockResolvedValue({}) } as any,
+      usersService as any,
+      auditLogsService as any,
+      { extractUsernames: jest.fn().mockReturnValue([]) } as any,
     );
 
-    return { service, ticketsRepository };
+    return {
+      service,
+      ticketsRepository,
+      ticketDependenciesRepository,
+      usersService,
+      auditLogsService,
+    };
   };
 
   it('rejects stale ticket update versions with a conflict', async () => {
@@ -98,7 +117,51 @@ describe('TicketsService', () => {
 
     expect(ticketsRepository.update).toHaveBeenCalledWith(
       { id: 1, version: 3 },
-      { status: TicketStatus.IN_PROGRESS },
+      { status: TicketStatus.IN_PROGRESS, version: 4 },
+    );
+  });
+
+  it('rejects DONE transition when unresolved blockers exist', async () => {
+    const { service, ticketDependenciesRepository } = createService(
+      createTicket({ status: TicketStatus.IN_REVIEW }),
+    );
+    ticketDependenciesRepository.find.mockResolvedValue([
+      {
+        blockedByTicketId: 42,
+        blockedByTicket: { status: TicketStatus.IN_PROGRESS },
+      },
+    ]);
+
+    await expect(
+      service.update(1, { version: 3, status: TicketStatus.DONE }, actor),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('auto-assigns least-loaded developer on IN_PROGRESS transition', async () => {
+    const { service, ticketsRepository, usersService, auditLogsService } =
+      createService(createTicket());
+    usersService.findDevelopers.mockResolvedValue([{ id: 2 }, { id: 3 }]);
+    ticketsRepository.find.mockResolvedValue([
+      { id: 10, assigneeId: 2 },
+      { id: 11, assigneeId: 2 },
+    ]);
+
+    await service.update(
+      1,
+      { version: 3, status: TicketStatus.IN_PROGRESS },
+      actor,
+    );
+
+    expect(ticketsRepository.update).toHaveBeenCalledWith(
+      { id: 1, version: 3 },
+      { assigneeId: 3, status: TicketStatus.IN_PROGRESS, version: 4 },
+    );
+    expect(auditLogsService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.AUTO_ASSIGN,
+        actor: AuditActor.SYSTEM,
+        metadata: expect.objectContaining({ assignedUserId: 3 }),
+      }),
     );
   });
 });
