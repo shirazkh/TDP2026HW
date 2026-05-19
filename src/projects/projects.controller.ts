@@ -9,6 +9,8 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
 import {
   ProjectResponseDto,
@@ -40,8 +42,12 @@ export class ProjectsController {
   @Post()
   async create(
     @Body() createProjectDto: CreateProjectDto,
+    @CurrentUser() currentUser: RequestUser,
   ): Promise<ProjectResponseDto> {
-    const project = await this.projectsService.create(createProjectDto);
+    const project = await this.projectsService.create(
+      createProjectDto,
+      currentUser,
+    );
 
     return toProjectResponse(project);
   }
@@ -51,13 +57,17 @@ export class ProjectsController {
   update(
     @Param('projectId', ParseIntPipe) projectId: number,
     @Body() updateProjectDto: UpdateProjectDto,
+    @CurrentUser() currentUser: RequestUser,
   ): Promise<void> {
-    return this.projectsService.update(projectId, updateProjectDto);
+    return this.projectsService.update(projectId, updateProjectDto, currentUser);
   }
 
   @Delete(':projectId')
   @HttpCode(200)
-  remove(@Param('projectId', ParseIntPipe) projectId: number): Promise<void> {
-    return this.projectsService.softDelete(projectId);
+  remove(
+    @Param('projectId', ParseIntPipe) projectId: number,
+    @CurrentUser() currentUser: RequestUser,
+  ): Promise<void> {
+    return this.projectsService.softDelete(projectId, currentUser);
   }
 }

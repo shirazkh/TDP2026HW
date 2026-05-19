@@ -10,6 +10,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import {
   TicketResponseDto,
@@ -43,8 +45,9 @@ export class TicketsController {
   @Post()
   async create(
     @Body() createTicketDto: CreateTicketDto,
+    @CurrentUser() currentUser: RequestUser,
   ): Promise<TicketResponseDto> {
-    const ticket = await this.ticketsService.create(createTicketDto);
+    const ticket = await this.ticketsService.create(createTicketDto, currentUser);
 
     return toTicketResponse(ticket);
   }
@@ -54,13 +57,17 @@ export class TicketsController {
   update(
     @Param('ticketId', ParseIntPipe) ticketId: number,
     @Body() updateTicketDto: UpdateTicketDto,
+    @CurrentUser() currentUser: RequestUser,
   ): Promise<void> {
-    return this.ticketsService.update(ticketId, updateTicketDto);
+    return this.ticketsService.update(ticketId, updateTicketDto, currentUser);
   }
 
   @Delete(':ticketId')
   @HttpCode(200)
-  remove(@Param('ticketId', ParseIntPipe) ticketId: number): Promise<void> {
-    return this.ticketsService.softDelete(ticketId);
+  remove(
+    @Param('ticketId', ParseIntPipe) ticketId: number,
+    @CurrentUser() currentUser: RequestUser,
+  ): Promise<void> {
+    return this.ticketsService.softDelete(ticketId, currentUser);
   }
 }

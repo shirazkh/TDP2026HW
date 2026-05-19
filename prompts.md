@@ -305,27 +305,109 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 ### Prompt(s)
 
-- TODO: Add the user's Phase 4 execution prompt here.
+- Execute Phase 4: Business Rules, State Machine, Audit Logging, and Concurrency exactly as outlined in `DEVELOPMENT_PLAN.md`.
+- Enforce strict ticket status progression: `TODO -> IN_PROGRESS -> IN_REVIEW -> DONE`.
+- Reject backward status transitions and illegal skipped transitions with `BadRequestException`.
+- Reject every attempted modification of a `DONE` ticket with `BadRequestException`.
+- Explicitly handle optimistic locking for ticket and comment updates using the TypeORM `@VersionColumn` values and return graceful `ConflictException` errors for stale requests.
+- Implement `AuditLogsModule`, `AuditLogsService`, and `AuditLogsController`.
+- Record state-changing actions across Users, Projects, Tickets, and Comments.
+- Capture authenticated user actors from JWT request context and preserve support for future `SYSTEM` audit actors.
+- Implement `GET /audit-logs` with filters for `entityType`, `entityId`, `action`, and `actor`.
 
 ### Implementation Summary
 
-- TODO: Summarize state machine, optimistic locking, audit logging, and rule enforcement.
+- Added administrator-only Audit Logs API at `GET /audit-logs`.
+- Added audit log query validation and response mapping.
+- Added `AuditLogsService.record` for append-only state-change logging.
+- Wired `AuditLogsModule` into `AppModule` and exported the audit service to domain modules.
+- Updated Users, Projects, Tickets, and Comments controllers to pass `@CurrentUser()` into all mutation service methods.
+- Updated Users, Projects, Tickets, and Comments services to record audit entries for create, update, and delete operations.
+- Added explicit version fields to ticket and comment update DTOs.
+- Updated ticket updates to compare the supplied version against the current row and execute the database update using `{ id, version }` criteria so stale writes fail safely.
+- Updated comment updates to compare the supplied version against the current row and execute the database update using `{ id, ticketId, version }` criteria.
+- Added `ConflictException` handling for stale ticket and comment update requests.
+- Enforced ticket immutability when status is `DONE`.
+- Enforced strict one-step ticket status transitions in lifecycle order.
+- Added focused unit tests for ticket status rules and optimistic-lock update criteria.
+- Added focused unit tests for comment optimistic-lock update criteria.
 
 ### Files Changed
 
-- TODO: List files created or modified.
+- `prompts.md`
+- `src/app.module.ts`
+- `src/audit-logs/audit-logs.controller.ts`
+- `src/audit-logs/audit-logs.module.ts`
+- `src/audit-logs/audit-logs.service.ts`
+- `src/audit-logs/dto/audit-log-query.dto.ts`
+- `src/audit-logs/dto/audit-log-response.dto.ts`
+- `src/users/users.controller.ts`
+- `src/users/users.module.ts`
+- `src/users/users.service.ts`
+- `src/projects/projects.controller.ts`
+- `src/projects/projects.module.ts`
+- `src/projects/projects.service.ts`
+- `src/tickets/dto/update-ticket.dto.ts`
+- `src/tickets/tickets.controller.ts`
+- `src/tickets/tickets.module.ts`
+- `src/tickets/tickets.service.ts`
+- `src/tickets/tickets.service.spec.ts`
+- `src/comments/comments.controller.ts`
+- `src/comments/comments.module.ts`
+- `src/comments/comments.service.ts`
+- `src/comments/comments.service.spec.ts`
+- `src/comments/dto/update-comment.dto.ts`
 
 ### Business Rules Covered
 
-- TODO: List constraints implemented during this phase.
+- Ticket status changes are strictly limited to one forward lifecycle step:
+  - `TODO -> IN_PROGRESS`
+  - `IN_PROGRESS -> IN_REVIEW`
+  - `IN_REVIEW -> DONE`
+- Backward ticket status transitions are rejected.
+- Skipped ticket status transitions are rejected.
+- `DONE` tickets cannot be updated or soft-deleted.
+- Ticket updates require an expected `version` value.
+- Comment updates require an expected `version` value.
+- Stale ticket updates return an informative `ConflictException`.
+- Stale comment updates return an informative `ConflictException`.
+- State-changing Users actions are audited:
+  - Create.
+  - Update.
+  - Delete.
+- State-changing Projects actions are audited:
+  - Create.
+  - Update.
+  - Soft delete.
+- State-changing Tickets actions are audited:
+  - Create.
+  - Update.
+  - Soft delete.
+- State-changing Comments actions are audited:
+  - Create.
+  - Update.
+  - Delete.
+- Audit logs capture action, entity type, entity ID, actor type, performer user ID, timestamp, and metadata.
+- Audit log retrieval is ADMIN-only through `@Roles(UserRole.ADMIN)`.
+- Audit log retrieval supports optional filters for `entityType`, `entityId`, `action`, and `actor`.
 
 ### Verification
 
-- TODO: List commands/tests run and results.
+- `npm run build` passed.
+- `npm test -- --runInBand` passed.
+- Focused tests added and passing:
+  - Ticket stale-version update conflict.
+  - Ticket `DONE` immutability.
+  - Ticket skipped status transition rejection.
+  - Ticket version-scoped update criteria.
+  - Comment stale-version update conflict.
+  - Comment version-scoped update criteria.
 
 ### Follow-ups
 
-- TODO: List unresolved items or next-phase handoffs.
+- Wire restore audit entries when Phase 5 soft-delete restore endpoints are implemented.
+- Use `AuditActor.SYSTEM` for Phase 5 automated actions such as auto-assignment and auto-escalation.
+- Add dependency-blocking checks before transition to `DONE` when ticket dependencies are implemented in Phase 5.
 
 ## Phase 5: Extended Features
 

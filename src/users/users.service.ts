@@ -2,6 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../common/enums/audit-action.enum';
+import { AuditActor } from '../common/enums/audit-actor.enum';
+import { AuditEntityType } from '../common/enums/audit-entity-type.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import {
   BCRYPT_SALT_ROUNDS,
@@ -23,16 +27,28 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(input: CreateUserInput): Promise<User> {
+  async create(input: CreateUserInput, actor?: RequestUser): Promise<User> {
     const password = await this.hashPassword(input.password);
     const user = this.usersRepository.create({
       ...input,
       password,
     });
 
-    return this.usersRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
+
+    await this.auditLogsService.record({
+      action: AuditAction.CREATE,
+      entityType: AuditEntityType.USER,
+      entityId: savedUser.id,
+      actor: actor ? AuditActor.USER : AuditActor.SYSTEM,
+      performedById: actor?.id ?? null,
+      metadata: { username: savedUser.username },
+    });
+
+    return savedUser;
   }
 
   findAll(): Promise<User[]> {
@@ -51,7 +67,11 @@ export class UsersService {
     return user;
   }
 
-  async update(id: number, input: UpdateUserDto): Promise<void> {
+  async update(
+    id: number,
+    input: UpdateUserDto,
+    actor: RequestUser,
+  ): Promise<void> {
     const user = await this.findById(id);
 
     if (input.fullName !== undefined) {
@@ -63,9 +83,27 @@ export class UsersService {
     }
 
     await this.usersRepository.save(user);
+
+    await this.auditLogsService.record({
+      action: AuditAction.UPDATE,
+      entityType: AuditEntityType.USER,
+      entityId: id,
+      actor: AuditActor.USER,
+      performedById: actor.id,
+      metadata: { updatedFields: Object.keys(input) },
+    });
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: number, actor: RequestUser): Promise<void> {
+    await this.findById(id);
+    await this.auditLogsService.record({
+      action: AuditAction.DELETE,
+      entityType: AuditEntityType.USER,
+      entityId: id,
+      actor: AuditActor.USER,
+      performedById: actor.id,
+    });
+
     const result = await this.usersRepository.delete(id);
 
     if (!result.affected) {
