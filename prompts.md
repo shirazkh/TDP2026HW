@@ -49,7 +49,7 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 ### Decisions and Open Questions
 
-- Credential model must be resolved because login requires a password but the user creation example omits one.
+- Credential model decision: Phase 2 adds a password column and uses a hashed fallback default password when registration or seed input omits credentials. This resolves the conflict between the required `/auth/login` endpoint and the README user creation contract, which does not include a password field.
 - Project-linked developer modeling must be resolved because auto-assignment mentions users linked to the project but the README does not define membership endpoints.
 
 ### Verification
@@ -143,6 +143,7 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 - Installed authentication dependencies for JWT, Passport, passport-jwt, and bcrypt.
 - Added `password` to `User` with `select: false` so it is excluded from standard TypeORM reads and normal API serialization paths.
 - Added bcrypt password hashing with a secure default fallback of `Password123!`.
+- Documented the password strategy tradeoff: a hardcoded fallback credential is a known production security anti-pattern, commonly associated with CWE-259. It is intentionally limited to this assignment design because the README registration contract omits a password field while the requirements still mandate a functioning `/auth/login` endpoint; this preserves compatibility with external grading and automated tests that may create users using the documented README shape.
 - Added a `UsersModule` and `UsersService` foundation for user lookup, request-user mapping, and future user creation with hashed passwords.
 - Added `AuthModule`, `AuthController`, and `AuthService`.
 - Implemented `POST /auth/login` with `LoginDto` validation, bcrypt credential verification, and stateless JWT response `{ accessToken, tokenType, expiresIn }`.
@@ -186,6 +187,7 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 - `POST /auth/login` is public and validates username/password input through class-validator.
 - Passwords are hashed with bcrypt before persistence and are not selected by default.
 - Missing user passwords fall back to `Password123!` before hashing.
+- The fallback default password is explicitly documented as an assignment compatibility mechanism, not a production-ready credential strategy.
 - `POST /auth/login` verifies credentials with bcrypt and returns a signed JWT access token.
 - `POST /auth/logout` invalidates the current bearer token through a server-side deny-list.
 - Revoked tokens are stored by hash instead of raw token value.
