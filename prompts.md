@@ -210,27 +210,96 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 ### Prompt(s)
 
-- TODO: Add the user's Phase 3 execution prompt here.
+- Execute Phase 3: Core CRUD APIs exactly as outlined in `DEVELOPMENT_PLAN.md`.
+- Implement complete CRUD modules, controllers, services, and strict DTO validation for Users, Projects, Tickets, and nested Ticket Comments.
+- Follow the README contract exactly, including `POST /users/update/:id` for user updates.
+- Keep all endpoints protected by the global JWT guard from Phase 2.
+- Ensure standard Project and Ticket reads hide soft-deleted records.
 
 ### Implementation Summary
 
-- TODO: Summarize users, projects, tickets, and comments CRUD implementation.
+- Added Users CRUD controller endpoints for list, read, create, update, and delete.
+- Extended `UsersService` to support listing, updating, deletion, and password-safe response mapping.
+- Added Projects CRUD module with create/read/list/update and soft-delete behavior.
+- Added Tickets CRUD module with project-scoped listing, create/read/update, and soft-delete behavior.
+- Added nested Comments CRUD module under `/tickets/:ticketId/comments`.
+- Added strict class-validator DTOs for create/update inputs across all four domains.
+- Added response mappers so standard API responses do not expose internal fields such as user passwords or soft-delete timestamps.
+- Wired `UsersModule`, `ProjectsModule`, `TicketsModule`, and `CommentsModule` into `AppModule`; all new endpoints inherit the global JWT and roles guards.
+- Used standard TypeORM repository reads for projects and tickets so soft-deleted rows are excluded by default.
 
 ### Files Changed
 
-- TODO: List files created or modified.
+- `prompts.md`
+- `src/app.module.ts`
+- `src/users/users.module.ts`
+- `src/users/users.service.ts`
+- `src/users/users.controller.ts`
+- `src/users/dto/create-user.dto.ts`
+- `src/users/dto/update-user.dto.ts`
+- `src/users/dto/user-response.dto.ts`
+- `src/projects/projects.module.ts`
+- `src/projects/projects.controller.ts`
+- `src/projects/projects.service.ts`
+- `src/projects/dto/create-project.dto.ts`
+- `src/projects/dto/update-project.dto.ts`
+- `src/projects/dto/project-response.dto.ts`
+- `src/tickets/tickets.module.ts`
+- `src/tickets/tickets.controller.ts`
+- `src/tickets/tickets.service.ts`
+- `src/tickets/dto/create-ticket.dto.ts`
+- `src/tickets/dto/update-ticket.dto.ts`
+- `src/tickets/dto/ticket-response.dto.ts`
+- `src/comments/comments.module.ts`
+- `src/comments/comments.controller.ts`
+- `src/comments/comments.service.ts`
+- `src/comments/dto/create-comment.dto.ts`
+- `src/comments/dto/update-comment.dto.ts`
+- `src/comments/dto/comment-response.dto.ts`
 
 ### Business Rules Covered
 
-- TODO: List constraints implemented during this phase.
+- Users API implemented:
+  - `GET /users`
+  - `GET /users/:userId`
+  - `POST /users`
+  - `POST /users/update/:userId`
+  - `DELETE /users/:userId`
+- Projects API implemented:
+  - `GET /projects`
+  - `GET /projects/:projectId`
+  - `POST /projects`
+  - `PATCH /projects/:projectId`
+  - `DELETE /projects/:projectId`
+- Tickets API implemented:
+  - `GET /tickets?projectId=:projectId`
+  - `GET /tickets/:ticketId`
+  - `POST /tickets`
+  - `PATCH /tickets/:ticketId`
+  - `DELETE /tickets/:ticketId`
+- Comments API implemented:
+  - `GET /tickets/:ticketId/comments`
+  - `POST /tickets/:ticketId/comments`
+  - `PATCH /tickets/:ticketId/comments/:commentId`
+  - `DELETE /tickets/:ticketId/comments/:commentId`
+- DTO validation enforces required fields, numeric IDs, ISO-8601 due dates, and enum values for user roles and ticket status/priority/type.
+- User creation uses `UsersService.create`, preserving bcrypt hashing and the default password fallback strategy from Phase 2.
+- Project creation verifies the owner user exists.
+- Ticket creation verifies the project exists and optional assignee exists.
+- Comment creation verifies the ticket and author exist.
+- Standard Project and Ticket list/read operations hide soft-deleted records through TypeORM default soft-delete filtering.
+- Project and Ticket delete endpoints perform soft deletes.
+- All new endpoints are protected by the global JWT guard; no CRUD endpoint is marked public.
 
 ### Verification
 
-- TODO: List commands/tests run and results.
+- `npm run build` passed.
+- `npm test -- --runInBand` passed.
 
 ### Follow-ups
 
-- TODO: List unresolved items or next-phase handoffs.
+- Add service-level business rules in Phase 4: optimistic-lock conflict handling, ticket state machine validation, `DONE` immutability, dependency blocking, and audit logging.
+- Add broader e2e coverage once seeded/authenticated test setup is available.
 
 ## Phase 4: Business Rules and Concurrency
 
