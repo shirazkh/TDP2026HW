@@ -130,27 +130,79 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 ### Prompt(s)
 
-- TODO: Add the user's Phase 2 execution prompt here.
+- Execute Phase 2: Authentication, Authorization, and Request Context exactly as outlined in `DEVELOPMENT_PLAN.md`.
+- Add a password column to the `User` entity with `select: false`.
+- Use bcrypt for hashing and fall back to the secure default password `Password123!` when no password is provided.
+- Create `AuthModule`, `AuthController`, and `AuthService`.
+- Implement `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`.
+- Implement Passport JWT strategy, JWT auth guard, roles guard, `@Roles`, and `@CurrentUser`.
+- Add a server-side token revocation strategy for logout.
 
 ### Implementation Summary
 
-- TODO: Summarize JWT login/logout/me, guards, roles, and credential decisions.
+- Installed authentication dependencies for JWT, Passport, passport-jwt, and bcrypt.
+- Added `password` to `User` with `select: false` so it is excluded from standard TypeORM reads and normal API serialization paths.
+- Added bcrypt password hashing with a secure default fallback of `Password123!`.
+- Added a `UsersModule` and `UsersService` foundation for user lookup, request-user mapping, and future user creation with hashed passwords.
+- Added `AuthModule`, `AuthController`, and `AuthService`.
+- Implemented `POST /auth/login` with `LoginDto` validation, bcrypt credential verification, and stateless JWT response `{ accessToken, tokenType, expiresIn }`.
+- Implemented `POST /auth/logout` using a persisted `RevokedToken` deny-list table keyed by SHA-256 token hash.
+- Implemented `GET /auth/me` using request context populated by the JWT strategy.
+- Added Passport JWT strategy using bearer tokens, expiry validation, revocation checks, and user lookup.
+- Added global JWT auth guard and roles guard through `APP_GUARD`.
+- Added `@Public`, `@Roles`, and `@CurrentUser` decorators.
+- Added JWT environment variables to `.env.example`.
 
 ### Files Changed
 
-- TODO: List files created or modified.
+- `.env.example`
+- `package.json`
+- `package-lock.json`
+- `prompts.md`
+- `src/app.module.ts`
+- `src/config/database.config.ts`
+- `src/users/user.entity.ts`
+- `src/users/user-password.constants.ts`
+- `src/users/users.module.ts`
+- `src/users/users.service.ts`
+- `src/auth/auth.constants.ts`
+- `src/auth/auth.controller.ts`
+- `src/auth/auth.module.ts`
+- `src/auth/auth.service.ts`
+- `src/auth/decorators/current-user.decorator.ts`
+- `src/auth/decorators/public.decorator.ts`
+- `src/auth/decorators/roles.decorator.ts`
+- `src/auth/dto/login.dto.ts`
+- `src/auth/entities/revoked-token.entity.ts`
+- `src/auth/guards/jwt-auth.guard.ts`
+- `src/auth/guards/roles.guard.ts`
+- `src/auth/interfaces/jwt-payload.interface.ts`
+- `src/auth/strategies/jwt.strategy.ts`
+- `src/common/interfaces/request-user.interface.ts`
 
 ### Business Rules Covered
 
-- TODO: List constraints implemented during this phase.
+- JWT authentication is now the default protection mechanism through a global guard.
+- `POST /auth/login` is public and validates username/password input through class-validator.
+- Passwords are hashed with bcrypt before persistence and are not selected by default.
+- Missing user passwords fall back to `Password123!` before hashing.
+- `POST /auth/login` verifies credentials with bcrypt and returns a signed JWT access token.
+- `POST /auth/logout` invalidates the current bearer token through a server-side deny-list.
+- Revoked tokens are stored by hash instead of raw token value.
+- `GET /auth/me` returns the authenticated request user's profile without password data.
+- `@Roles(UserRole.ADMIN)` support is available for ADMIN-only endpoints in later phases.
+- `@CurrentUser()` exposes authenticated user context to controllers without manually reading the request.
 
 ### Verification
 
-- TODO: List commands/tests run and results.
+- `npm run build` passed.
+- `npm test -- --runInBand` passed.
 
 ### Follow-ups
 
-- TODO: List unresolved items or next-phase handoffs.
+- Add auth-focused unit/e2e tests once user creation endpoints or seed data are available.
+- Apply `@Roles(UserRole.ADMIN)` to deleted/restore endpoints when those endpoints are implemented.
+- Use `UsersService.create` for Phase 3 user creation so password hashing and the default password fallback are consistently applied.
 
 ## Phase 3: Core API
 
