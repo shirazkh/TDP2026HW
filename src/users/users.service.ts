@@ -8,6 +8,7 @@ import {
   DEFAULT_USER_PASSWORD,
 } from './user-password.constants';
 import { User } from './user.entity';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 export interface CreateUserInput {
   username: string;
@@ -34,6 +35,12 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
+  findAll(): Promise<User[]> {
+    return this.usersRepository.find({
+      order: { id: 'ASC' },
+    });
+  }
+
   async findById(id: number): Promise<User> {
     const user = await this.usersRepository.findOne({ where: { id } });
 
@@ -42,6 +49,28 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  async update(id: number, input: UpdateUserDto): Promise<void> {
+    const user = await this.findById(id);
+
+    if (input.fullName !== undefined) {
+      user.fullName = input.fullName;
+    }
+
+    if (input.role !== undefined) {
+      user.role = input.role;
+    }
+
+    await this.usersRepository.save(user);
+  }
+
+  async remove(id: number): Promise<void> {
+    const result = await this.usersRepository.delete(id);
+
+    if (!result.affected) {
+      throw new NotFoundException(`User ${id} was not found`);
+    }
   }
 
   async findByUsernameWithPassword(username: string): Promise<User | null> {
