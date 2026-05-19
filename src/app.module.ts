@@ -6,10 +6,21 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { CommentsModule } from './comments/comments.module';
 import { getDatabaseConfig } from './config/database.config';
+import { ProjectsModule } from './projects/projects.module';
+import { TicketsModule } from './tickets/tickets.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
-  imports: [TypeOrmModule.forRoot(getDatabaseConfig()), AuthModule],
+  imports: [
+    TypeOrmModule.forRoot(getDatabaseConfig()),
+    AuthModule,
+    UsersModule,
+    ProjectsModule,
+    TicketsModule,
+    CommentsModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,
