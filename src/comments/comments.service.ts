@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../common/enums/audit-action.enum';
+import { AuditActor } from '../common/enums/audit-actor.enum';
+import { AuditEntityType } from '../common/enums/audit-entity-type.enum';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { TicketsService } from '../tickets/tickets.service';
 import { UsersService } from '../users/users.service';
 import { Comment } from './comment.entity';
@@ -14,6 +19,7 @@ export class CommentsService {
     private readonly commentsRepository: Repository<Comment>,
     private readonly ticketsService: TicketsService,
     private readonly usersService: UsersService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async findByTicket(ticketId: number): Promise<Comment[]> {
@@ -25,7 +31,11 @@ export class CommentsService {
     });
   }
 
-  async create(ticketId: number, input: CreateCommentDto): Promise<Comment> {
+  async create(
+    ticketId: number,
+    input: CreateCommentDto,
+    actor: RequestUser,
+  ): Promise<Comment> {
     await this.ticketsService.findById(ticketId);
     await this.usersService.findById(input.authorId);
 
@@ -35,21 +45,60 @@ export class CommentsService {
       content: input.content,
     });
 
-    return this.commentsRepository.save(comment);
+    const savedComment = await this.commentsRepository.save(comment);
+
+    await this.auditLogsService.record({
+      action: AuditAction.CREATE,
+      entityType: AuditEntityType.COMMENT,
+      entityId: savedComment.id,
+      actor: AuditActor.USER,
+      performedById: actor.id,
+      metadata: { ticketId, authorId: savedComment.authorId },
+    });
+
+    return savedComment;
   }
 
   async update(
     ticketId: number,
     commentId: number,
     input: UpdateCommentDto,
+    actor: RequestUser,
   ): Promise<void> {
     const comment = await this.findByTicketAndId(ticketId, commentId);
-    comment.content = input.content;
 
-    await this.commentsRepository.save(comment);
+    if (comment.version !== input.version) {
+      throw new ConflictException(
+        `Comment ${commentId} was modified by another request. Expected version ${input.version}, current version ${comment.version}.`,
+      );
+    }
+
+    const result = await this.commentsRepository.update(
+      { id: commentId, ticketId, version: input.version },
+      { content: input.content },
+    );
+
+    if (!result.affected) {
+      throw new ConflictException(
+        `Comment ${commentId} was modified by another request. Refresh and retry with the latest version.`,
+      );
+    }
+
+    await this.auditLogsService.record({
+      action: AuditAction.UPDATE,
+      entityType: AuditEntityType.COMMENT,
+      entityId: commentId,
+      actor: AuditActor.USER,
+      performedById: actor.id,
+      metadata: { ticketId, updatedFields: ['content'] },
+    });
   }
 
-  async remove(ticketId: number, commentId: number): Promise<void> {
+  async remove(
+    ticketId: number,
+    commentId: number,
+    actor: RequestUser,
+  ): Promise<void> {
     await this.findByTicketAndId(ticketId, commentId);
     const result = await this.commentsRepository.delete({
       id: commentId,
@@ -59,6 +108,15 @@ export class CommentsService {
     if (!result.affected) {
       throw new NotFoundException(`Comment ${commentId} was not found`);
     }
+
+    await this.auditLogsService.record({
+      action: AuditAction.DELETE,
+      entityType: AuditEntityType.COMMENT,
+      entityId: commentId,
+      actor: AuditActor.USER,
+      performedById: actor.id,
+      metadata: { ticketId },
+    });
   }
 
   private async findByTicketAndId(

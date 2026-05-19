@@ -8,6 +8,8 @@ import {
   ParseIntPipe,
   Post,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { toUserResponse, UserResponseDto } from './dto/user-response.dto';
@@ -34,8 +36,11 @@ export class UsersController {
   }
 
   @Post()
-  async create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    const user = await this.usersService.create(createUserDto);
+  async create(
+    @Body() createUserDto: CreateUserDto,
+    @CurrentUser() currentUser: RequestUser,
+  ): Promise<UserResponseDto> {
+    const user = await this.usersService.create(createUserDto, currentUser);
 
     return toUserResponse(user);
   }
@@ -45,13 +50,17 @@ export class UsersController {
   update(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() updateUserDto: UpdateUserDto,
+    @CurrentUser() currentUser: RequestUser,
   ): Promise<void> {
-    return this.usersService.update(userId, updateUserDto);
+    return this.usersService.update(userId, updateUserDto, currentUser);
   }
 
   @Delete(':userId')
   @HttpCode(200)
-  remove(@Param('userId', ParseIntPipe) userId: number): Promise<void> {
-    return this.usersService.remove(userId);
+  remove(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() currentUser: RequestUser,
+  ): Promise<void> {
+    return this.usersService.remove(userId, currentUser);
   }
 }

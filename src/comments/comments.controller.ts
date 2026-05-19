@@ -9,6 +9,8 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CommentsService } from './comments.service';
 import {
   CommentResponseDto,
@@ -34,10 +36,12 @@ export class CommentsController {
   async create(
     @Param('ticketId', ParseIntPipe) ticketId: number,
     @Body() createCommentDto: CreateCommentDto,
+    @CurrentUser() currentUser: RequestUser,
   ): Promise<CommentResponseDto> {
     const comment = await this.commentsService.create(
       ticketId,
       createCommentDto,
+      currentUser,
     );
 
     return toCommentResponse(comment);
@@ -49,8 +53,14 @@ export class CommentsController {
     @Param('ticketId', ParseIntPipe) ticketId: number,
     @Param('commentId', ParseIntPipe) commentId: number,
     @Body() updateCommentDto: UpdateCommentDto,
+    @CurrentUser() currentUser: RequestUser,
   ): Promise<void> {
-    return this.commentsService.update(ticketId, commentId, updateCommentDto);
+    return this.commentsService.update(
+      ticketId,
+      commentId,
+      updateCommentDto,
+      currentUser,
+    );
   }
 
   @Delete(':commentId')
@@ -58,7 +68,8 @@ export class CommentsController {
   remove(
     @Param('ticketId', ParseIntPipe) ticketId: number,
     @Param('commentId', ParseIntPipe) commentId: number,
+    @CurrentUser() currentUser: RequestUser,
   ): Promise<void> {
-    return this.commentsService.remove(ticketId, commentId);
+    return this.commentsService.remove(ticketId, commentId, currentUser);
   }
 }
