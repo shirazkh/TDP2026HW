@@ -43,7 +43,7 @@ describe('TicketEscalationService', () => {
 
     expect(ticket.priority).toBe(TicketPriority.HIGH);
     expect(ticket.status).toBe(TicketStatus.IN_PROGRESS);
-    expect(ticket.isOverdue).toBe(true);
+    expect(ticket.isOverdue).toBe(false);
     expect(auditLogsService.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: AuditAction.AUTO_ESCALATE,
@@ -51,10 +51,34 @@ describe('TicketEscalationService', () => {
         metadata: expect.objectContaining({
           previousPriority: TicketPriority.MEDIUM,
           nextPriority: TicketPriority.HIGH,
+          isOverdue: false,
           statusUnchanged: TicketStatus.IN_PROGRESS,
         }),
       }),
     );
+  });
+
+  it('sets overdue flag when escalation reaches CRITICAL', async () => {
+    const ticket = createTicket({ priority: TicketPriority.HIGH });
+    const ticketsRepository = {
+      find: jest.fn().mockResolvedValue([ticket]),
+      save: jest.fn().mockResolvedValue(ticket),
+    };
+    const auditLogsService = {
+      record: jest.fn().mockResolvedValue({}),
+    };
+    const service = new TicketEscalationService(
+      ticketsRepository as any,
+      auditLogsService as any,
+    );
+
+    await expect(
+      service.escalateOverdueTickets(new Date('2026-01-02T00:00:00.000Z')),
+    ).resolves.toBe(1);
+
+    expect(ticket.priority).toBe(TicketPriority.CRITICAL);
+    expect(ticket.status).toBe(TicketStatus.IN_PROGRESS);
+    expect(ticket.isOverdue).toBe(true);
   });
 
   it('keeps critical overdue tickets idempotent after overdue flag is set', async () => {

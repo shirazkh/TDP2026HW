@@ -28,10 +28,19 @@ describe('CommentsService', () => {
       findOne: jest.fn().mockResolvedValue(comment),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
+    const commentMentionsRepository = {
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      create: jest.fn((input) => input),
+      save: jest.fn().mockResolvedValue([]),
+    };
     const service = new CommentsService(
       commentsRepository as any,
+      commentMentionsRepository as any,
       { findById: jest.fn().mockResolvedValue({ id: 10 }) } as any,
-      { findById: jest.fn().mockResolvedValue({ id: 2 }) } as any,
+      {
+        findById: jest.fn().mockResolvedValue({ id: 2 }),
+        findByUsernamesCaseInsensitive: jest.fn().mockResolvedValue([]),
+      } as any,
       { record: jest.fn().mockResolvedValue({}) } as any,
       { extractUsernames: jest.fn().mockReturnValue(['jdoe']) } as any,
     );

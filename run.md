@@ -88,6 +88,8 @@ docker compose exec db psql -U issueflow -d issueflow -c "\d tickets"
 docker compose exec db psql -U issueflow -d issueflow -c "\d comments"
 docker compose exec db psql -U issueflow -d issueflow -c "\d projects"
 docker compose exec db psql -U issueflow -d issueflow -c "\d audit_logs"
+docker compose exec db psql -U issueflow -d issueflow -c "\d attachments"
+docker compose exec db psql -U issueflow -d issueflow -c "\d comment_mentions"
 ```
 
 Expected highlights:
@@ -96,6 +98,8 @@ Expected highlights:
 - `tickets.deleted_at` and `projects.deleted_at` support soft delete.
 - `audit_logs` stores append-only state-change records.
 - `revoked_tokens` stores hashed revoked JWT tokens for logout.
+- `attachments` stores ticket attachment metadata and file data.
+- `comment_mentions` stores persisted comment-to-user mention associations.
 
 ## Authentication Notes
 

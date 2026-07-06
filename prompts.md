@@ -417,21 +417,28 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 - Add blocker validation logic to `TicketsService` so tickets cannot transition to `DONE` while blocked by unresolved tickets.
 - Add case-insensitive mention extraction for `@username` patterns in ticket descriptions and comment text.
 - Document detected mentions through service audit metadata.
-- When a ticket transitions to `IN_PROGRESS` without an assignee, automatically assign it to the least-loaded developer candidate and record the action as `SYSTEM`.
+- When a ticket is created without an assignee, automatically assign it to the least-loaded developer candidate and record the action as `SYSTEM`.
 - Implement a simulated or scheduled worker/service function that finds overdue unresolved tickets, bumps priority, sets overdue state, never changes status, and records `SYSTEM` audit entries.
 
 ### Implementation Summary
 
 - Installed `@nestjs/schedule` and wired `ScheduleModule.forRoot()` in `AppModule`.
 - Added `MentionParserService` for case-insensitive `@username` extraction with duplicate normalization.
-- Added mention extraction to comment create/update audit metadata.
+- Added persisted comment mention associations and mention extraction to comment create/update audit metadata.
 - Added mention extraction to ticket create/update audit metadata.
 - Added unresolved dependency validation before a ticket can transition to `DONE`.
-- Added least-loaded developer auto-assignment when an unassigned ticket transitions to `IN_PROGRESS`.
+- Added least-loaded developer auto-assignment when a ticket is created without `assigneeId`.
 - Recorded auto-assignment audit entries with `actor = SYSTEM` and `action = AUTO_ASSIGN`.
+- Added full ticket dependency endpoints for add/list/remove blocker relationships.
+- Added attachment upload/delete endpoints with 10 MB size limit and MIME type allow-list.
+- Added CSV ticket export/import endpoints using structured CSV parser/stringifier libraries.
+- Added deleted-list and restore endpoints for soft-deleted projects and tickets.
+- Added `GET /users/:userId/mentions` and `mentionedUsers` metadata in comment responses.
+- Added `GET /projects/:projectId/workload`.
 - Added `TicketEscalationService` with both scheduled execution and callable `escalateOverdueTickets` function for simulation/testing.
 - Implemented overdue ticket escalation for unresolved tickets with `dueDate` in the past.
-- Escalation promotes priority one level, sets `isOverdue = true`, records `actor = SYSTEM`, and preserves ticket status.
+- Escalation promotes priority one level, sets `isOverdue = true` only when the overdue ticket reaches `CRITICAL`, records `actor = SYSTEM`, and preserves ticket status.
+- Manual priority changes clear `isOverdue` so the next escalation cycle re-evaluates from the new priority.
 - Added developer lookup support through `UsersService.findDevelopers`.
 - Because no project-membership API exists yet, auto-assignment uses all `DEVELOPER` users as the candidate pool and calculates workload only from non-`DONE` tickets within the target project.
 
@@ -442,16 +449,34 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 - `prompts.md`
 - `src/app.module.ts`
 - `src/users/users.service.ts`
+- `src/users/users.controller.ts`
+- `src/users/users.module.ts`
+- `src/users/dto/user-mentions-response.dto.ts`
+- `src/attachments/attachment.entity.ts`
+- `src/attachments/attachments.controller.ts`
+- `src/attachments/attachments.module.ts`
+- `src/attachments/attachments.service.ts`
+- `src/attachments/dto/attachment-response.dto.ts`
+- `src/comments/comment.entity.ts`
+- `src/comments/comment-mention.entity.ts`
 - `src/comments/comments.module.ts`
 - `src/comments/comments.service.ts`
 - `src/comments/comments.service.spec.ts`
 - `src/comments/mention-parser.service.ts`
 - `src/comments/mention-parser.service.spec.ts`
 - `src/tickets/tickets.module.ts`
+- `src/tickets/tickets.controller.ts`
 - `src/tickets/tickets.service.ts`
 - `src/tickets/tickets.service.spec.ts`
 - `src/tickets/ticket-escalation.service.ts`
 - `src/tickets/ticket-escalation.service.spec.ts`
+- `src/tickets/dto/add-ticket-dependency.dto.ts`
+- `src/tickets/dto/import-ticket-result.dto.ts`
+- `src/tickets/dto/ticket-dependency-response.dto.ts`
+- `src/projects/projects.controller.ts`
+- `src/projects/projects.module.ts`
+- `src/projects/projects.service.ts`
+- `src/projects/dto/project-workload-response.dto.ts`
 
 ### Business Rules Covered
 
@@ -459,11 +484,17 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 - Unresolved blockers are blocker tickets whose status is not `DONE`.
 - Blocked `DONE` transitions throw `BadRequestException`.
 - Mentions are extracted from comments and ticket descriptions with case-insensitive normalization.
-- Mention metadata is captured in audit log metadata as `mentionedUsernames`.
-- Auto-assignment runs when a ticket transitions to `IN_PROGRESS` and has no assignee.
+- Mention metadata is persisted in `comment_mentions`, included in comment responses as `mentionedUsers`, exposed through `GET /users/:userId/mentions`, and captured in audit log metadata as `mentionedUsernames`.
+- Ticket dependency add/list/remove endpoints are implemented, and dependency creation validates that both tickets exist and belong to the same project.
+- Attachment upload rejects files larger than 10 MB and allows only `image/png`, `image/jpeg`, `application/pdf`, and `text/plain`.
+- Ticket CSV export returns `id`, `title`, `description`, `status`, `priority`, `type`, and `assigneeId`.
+- Ticket CSV import accepts multipart CSV, handles commas/quotes through CSV libraries, and returns `{ created, failed, errors }`.
+- Soft-deleted projects and tickets are hidden from standard reads, listable through ADMIN-only deleted endpoints, and restorable through ADMIN-only restore endpoints.
+- Auto-assignment runs when a ticket is created without `assigneeId`.
 - Auto-assignment chooses the `DEVELOPER` candidate with the lowest count of non-`DONE` tickets in the same project.
 - Auto-assignment ties are broken by user registration order because developers are sorted by ascending user ID.
 - If no developer candidates exist, the ticket remains unassigned.
+- `GET /projects/:projectId/workload` returns developer workload sorted by open ticket count.
 - Auto-assignment audit logs use `actor = SYSTEM`.
 - Auto-escalation only processes tickets with a past `dueDate` whose status is not `DONE`.
 - Auto-escalation promotes priority by one level:
@@ -471,7 +502,8 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
   - `MEDIUM -> HIGH`
   - `HIGH -> CRITICAL`
   - `CRITICAL -> CRITICAL`
-- Auto-escalation sets `isOverdue = true`.
+- Auto-escalation sets `isOverdue = true` when an overdue ticket reaches `CRITICAL`.
+- Manual priority changes clear `isOverdue`.
 - Auto-escalation never changes ticket status.
 - Auto-escalation audit logs use `actor = SYSTEM`.
 - Critical overdue tickets with `isOverdue = true` are idempotent and are not repeatedly audited.
@@ -480,21 +512,20 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 
 - `npm run build` passed.
 - `npm test -- --runInBand` passed.
+- Final completion verification after implementing the remaining extended features passed with 5 test suites and 13 tests.
 - Local verification was completed by the project owner: Phase 5 compiled with 0 errors, including blockers, mentions, auto-assignment, and the auto-escalation worker.
 - Focused tests added and passing:
   - Case-insensitive mention extraction and de-duplication.
   - Blocked `DONE` transition rejection.
-  - Least-loaded developer auto-assignment on `IN_PROGRESS` transition.
+  - Least-loaded developer auto-assignment on ticket creation.
   - SYSTEM audit record for auto-assignment.
   - Overdue priority escalation without status changes.
   - Idempotent critical overdue escalation behavior.
 
 ### Follow-ups
 
-- Persist full mention associations and implement `GET /users/:userId/mentions` if completing the full PDF mention feature.
-- Add ticket dependency management endpoints if completing the full ticket dependencies API.
-- Add attachment upload/delete, CSV import/export, and deleted/restore endpoints from the broader Phase 5 plan if required in the next iteration.
 - Replace the all-developers auto-assignment fallback with explicit project membership if a membership API/model is introduced.
+- Add broader e2e tests around the completed endpoints if more time is available.
 
 ## Phase 6: Testing and Documentation
 
@@ -543,10 +574,10 @@ This file documents the AI-assisted development journey for IssueFlow. Update it
 - Both commands passed during Phase 6.
 - Test suite coverage at final verification:
   - 5 test suites passed.
-  - 12 tests passed.
+  - 13 tests passed.
 
 ### Follow-ups
 
 - Repository is ready for evaluator pull and local execution using `run.md`.
-- Remaining extended PDF features not implemented in this scoped build are documented in Phase 5 follow-ups: persisted mention associations, full dependency management endpoints, attachments, CSV import/export, and soft-delete restore endpoints.
+- The extended PDF features requested after final review were completed on the active branch, including persisted mentions, dependency endpoints, attachments, CSV import/export, soft-delete restore/list endpoints, workload, and auto-assignment correction.
 - The assignment-compatible default password fallback remains documented as non-production behavior.
