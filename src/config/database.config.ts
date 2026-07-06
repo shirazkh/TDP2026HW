@@ -1,5 +1,6 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { AuditLog } from '../audit-logs/audit-log.entity';
+import { RevokedToken } from '../auth/entities/revoked-token.entity';
 import { Comment } from '../comments/comment.entity';
 import { Project } from '../projects/project.entity';
 import { TicketDependency } from '../tickets/ticket-dependency.entity';
@@ -26,7 +27,15 @@ const parseNumber = (value: string | undefined, defaultValue: number) => {
 
 export const getDatabaseConfig = (): TypeOrmModuleOptions => {
   const commonOptions = {
-    entities: [AuditLog, Comment, Project, Ticket, TicketDependency, User],
+    entities: [
+      AuditLog,
+      Comment,
+      Project,
+      RevokedToken,
+      Ticket,
+      TicketDependency,
+      User,
+    ],
     synchronize: parseBoolean(process.env.TYPEORM_SYNCHRONIZE, true),
     logging: parseBoolean(process.env.TYPEORM_LOGGING, false),
   };
