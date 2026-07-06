@@ -36,15 +36,16 @@ export class TicketEscalationService {
     for (const ticket of overdueTickets) {
       const previousPriority = ticket.priority;
       const nextPriority = this.getNextPriority(ticket.priority);
+      const nextIsOverdue = nextPriority === TicketPriority.CRITICAL;
       const shouldUpdate =
-        ticket.priority !== nextPriority || ticket.isOverdue === false;
+        ticket.priority !== nextPriority || ticket.isOverdue !== nextIsOverdue;
 
       if (!shouldUpdate) {
         continue;
       }
 
       ticket.priority = nextPriority;
-      ticket.isOverdue = true;
+      ticket.isOverdue = nextIsOverdue;
 
       await this.ticketsRepository.save(ticket);
 
@@ -58,6 +59,7 @@ export class TicketEscalationService {
           dueDate: ticket.dueDate?.toISOString() ?? null,
           previousPriority,
           nextPriority,
+          isOverdue: nextIsOverdue,
           statusUnchanged: ticket.status,
         },
       });

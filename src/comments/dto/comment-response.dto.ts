@@ -6,6 +6,11 @@ export interface CommentResponseDto {
   authorId: number;
   content: string;
   version: number;
+  mentionedUsers: Array<{
+    id: number;
+    username: string;
+    fullName: string;
+  }>;
 }
 
 export const toCommentResponse = (comment: Comment): CommentResponseDto => ({
@@ -14,4 +19,10 @@ export const toCommentResponse = (comment: Comment): CommentResponseDto => ({
   authorId: comment.authorId,
   content: comment.content,
   version: comment.version,
+  mentionedUsers:
+    comment.mentions?.map((mention) => ({
+      id: mention.user.id,
+      username: mention.user.username,
+      fullName: mention.user.fullName,
+    })) ?? [],
 });

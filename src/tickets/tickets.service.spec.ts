@@ -35,6 +35,8 @@ describe('TicketsService', () => {
 
   const createService = (ticket: Ticket) => {
     const ticketsRepository = {
+      create: jest.fn((input) => input),
+      save: jest.fn((input) => Promise.resolve({ ...input, id: 1, version: 1 })),
       findOne: jest.fn().mockResolvedValue(ticket),
       find: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -137,7 +139,7 @@ describe('TicketsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('auto-assigns least-loaded developer on IN_PROGRESS transition', async () => {
+  it('auto-assigns least-loaded developer on ticket creation without assignee', async () => {
     const { service, ticketsRepository, usersService, auditLogsService } =
       createService(createTicket());
     usersService.findDevelopers.mockResolvedValue([{ id: 2 }, { id: 3 }]);
@@ -146,15 +148,22 @@ describe('TicketsService', () => {
       { id: 11, assigneeId: 2 },
     ]);
 
-    await service.update(
-      1,
-      { version: 3, status: TicketStatus.IN_PROGRESS },
+    await service.create(
+      {
+        title: 'Ticket',
+        description: 'Description',
+        status: TicketStatus.TODO,
+        priority: TicketPriority.MEDIUM,
+        type: TicketType.BUG,
+        projectId: 1,
+      },
       actor,
     );
 
-    expect(ticketsRepository.update).toHaveBeenCalledWith(
-      { id: 1, version: 3 },
-      { assigneeId: 3, status: TicketStatus.IN_PROGRESS, version: 4 },
+    expect(ticketsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assigneeId: 3,
+      }),
     );
     expect(auditLogsService.record).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -190,7 +190,7 @@ This document records the project-level instructions, design standards, and busi
 
 ### Auto-Assignment
 
-- Auto-assignment runs when a ticket transitions to `IN_PROGRESS` without an assignee.
+- Auto-assignment runs when a ticket is created without an assignee.
 - Only `DEVELOPER` users are eligible.
 - `ADMIN` users are excluded.
 - Workload is the count of non-`DONE` tickets assigned to a developer within the same project.
@@ -209,7 +209,8 @@ This document records the project-level instructions, design standards, and busi
   - `MEDIUM -> HIGH`
   - `HIGH -> CRITICAL`
   - `CRITICAL -> CRITICAL`
-- Set `isOverdue = true` during escalation.
+- Set `isOverdue = true` when an overdue ticket reaches `CRITICAL`.
+- Manual priority changes clear `isOverdue` so escalation can be re-evaluated from the new priority.
 - Critical overdue tickets with `isOverdue = true` are idempotent and are not repeatedly audited.
 - Record auto-escalation with `actor = SYSTEM` and `action = AUTO_ESCALATE`.
 

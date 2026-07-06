@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AttachmentsModule } from './attachments/attachments.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -18,6 +19,7 @@ import { UsersModule } from './users/users.module';
   imports: [
     TypeOrmModule.forRoot(getDatabaseConfig()),
     ScheduleModule.forRoot(),
+    AttachmentsModule,
     AuthModule,
     AuditLogsModule,
     UsersModule,
