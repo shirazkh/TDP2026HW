@@ -12,6 +12,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import {
+  toUserMentionCommentResponse,
+  UserMentionCommentResponseDto,
+} from './dto/user-mentions-response.dto';
 import { toUserResponse, UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
@@ -33,6 +37,15 @@ export class UsersController {
     const user = await this.usersService.findById(userId);
 
     return toUserResponse(user);
+  }
+
+  @Get(':userId/mentions')
+  async findMentions(
+    @Param('userId', ParseIntPipe) userId: number,
+  ): Promise<UserMentionCommentResponseDto[]> {
+    const mentions = await this.usersService.findMentionedComments(userId);
+
+    return mentions.map(toUserMentionCommentResponse);
   }
 
   @Post()

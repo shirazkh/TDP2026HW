@@ -10,12 +10,15 @@ import {
   Post,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../common/enums/user-role.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
 import {
   ProjectResponseDto,
   toProjectResponse,
 } from './dto/project-response.dto';
+import { ProjectWorkloadResponseDto } from './dto/project-workload-response.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { ProjectsService } from './projects.service';
 
@@ -30,6 +33,14 @@ export class ProjectsController {
     return projects.map(toProjectResponse);
   }
 
+  @Get('deleted')
+  @Roles(UserRole.ADMIN)
+  async findDeleted(): Promise<ProjectResponseDto[]> {
+    const projects = await this.projectsService.findDeleted();
+
+    return projects.map(toProjectResponse);
+  }
+
   @Get(':projectId')
   async findOne(
     @Param('projectId', ParseIntPipe) projectId: number,
@@ -37,6 +48,13 @@ export class ProjectsController {
     const project = await this.projectsService.findById(projectId);
 
     return toProjectResponse(project);
+  }
+
+  @Get(':projectId/workload')
+  getWorkload(
+    @Param('projectId', ParseIntPipe) projectId: number,
+  ): Promise<ProjectWorkloadResponseDto[]> {
+    return this.projectsService.getWorkload(projectId);
   }
 
   @Post()
@@ -69,5 +87,15 @@ export class ProjectsController {
     @CurrentUser() currentUser: RequestUser,
   ): Promise<void> {
     return this.projectsService.softDelete(projectId, currentUser);
+  }
+
+  @Post(':projectId/restore')
+  @Roles(UserRole.ADMIN)
+  @HttpCode(200)
+  restore(
+    @Param('projectId', ParseIntPipe) projectId: number,
+    @CurrentUser() currentUser: RequestUser,
+  ): Promise<void> {
+    return this.projectsService.restore(projectId, currentUser);
   }
 }

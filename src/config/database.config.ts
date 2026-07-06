@@ -1,7 +1,9 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { AuditLog } from '../audit-logs/audit-log.entity';
+import { Attachment } from '../attachments/attachment.entity';
 import { RevokedToken } from '../auth/entities/revoked-token.entity';
 import { Comment } from '../comments/comment.entity';
+import { CommentMention } from '../comments/comment-mention.entity';
 import { Project } from '../projects/project.entity';
 import { TicketDependency } from '../tickets/ticket-dependency.entity';
 import { Ticket } from '../tickets/ticket.entity';
@@ -29,7 +31,9 @@ export const getDatabaseConfig = (): TypeOrmModuleOptions => {
   const commonOptions = {
     entities: [
       AuditLog,
+      Attachment,
       Comment,
+      CommentMention,
       Project,
       RevokedToken,
       Ticket,

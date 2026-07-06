@@ -4,11 +4,13 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   VersionColumn,
 } from 'typeorm';
 import { IssueFlowBaseEntity } from '../common/entities/base.entity';
 import { Ticket } from '../tickets/ticket.entity';
 import { User } from '../users/user.entity';
+import { CommentMention } from './comment-mention.entity';
 
 @Entity('comments')
 export class Comment extends IssueFlowBaseEntity {
@@ -36,6 +38,9 @@ export class Comment extends IssueFlowBaseEntity {
 
   @Column({ type: 'text' })
   content: string;
+
+  @OneToMany(() => CommentMention, (mention) => mention.comment)
+  mentions: CommentMention[];
 
   @VersionColumn()
   version: number;

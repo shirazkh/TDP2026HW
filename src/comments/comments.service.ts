@@ -8,7 +8,9 @@ import { AuditEntityType } from '../common/enums/audit-entity-type.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { TicketsService } from '../tickets/tickets.service';
 import { UsersService } from '../users/users.service';
+import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
+import { CommentMention } from './comment-mention.entity';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { MentionParserService } from './mention-parser.service';
@@ -18,6 +20,8 @@ export class CommentsService {
   constructor(
     @InjectRepository(Comment)
     private readonly commentsRepository: Repository<Comment>,
+    @InjectRepository(CommentMention)
+    private readonly commentMentionsRepository: Repository<CommentMention>,
     private readonly ticketsService: TicketsService,
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
@@ -29,6 +33,11 @@ export class CommentsService {
 
     return this.commentsRepository.find({
       where: { ticketId },
+      relations: {
+        mentions: {
+          user: true,
+        },
+      },
       order: { id: 'ASC' },
     });
   }
@@ -48,8 +57,9 @@ export class CommentsService {
     });
 
     const savedComment = await this.commentsRepository.save(comment);
-    const mentionedUsernames = this.mentionParserService.extractUsernames(
-      input.content,
+    const mentionedUsers = await this.syncMentions(savedComment, input.content);
+    const mentionedUsernames = mentionedUsers.map((user) =>
+      user.username.toLowerCase(),
     );
 
     await this.auditLogsService.record({
@@ -65,7 +75,7 @@ export class CommentsService {
       },
     });
 
-    return savedComment;
+    return this.findByTicketAndId(ticketId, savedComment.id);
   }
 
   async update(
@@ -93,6 +103,8 @@ export class CommentsService {
       );
     }
 
+    const mentionedUsers = await this.syncMentions(comment, input.content);
+
     await this.auditLogsService.record({
       action: AuditAction.UPDATE,
       entityType: AuditEntityType.COMMENT,
@@ -102,8 +114,8 @@ export class CommentsService {
       metadata: {
         ticketId,
         updatedFields: ['content'],
-        mentionedUsernames: this.mentionParserService.extractUsernames(
-          input.content,
+        mentionedUsernames: mentionedUsers.map((user) =>
+          user.username.toLowerCase(),
         ),
       },
     });
@@ -142,6 +154,11 @@ export class CommentsService {
 
     const comment = await this.commentsRepository.findOne({
       where: { id: commentId, ticketId },
+      relations: {
+        mentions: {
+          user: true,
+        },
+      },
     });
 
     if (!comment) {
@@ -149,5 +166,33 @@ export class CommentsService {
     }
 
     return comment;
+  }
+
+  private async syncMentions(
+    comment: Comment,
+    content: string,
+  ): Promise<User[]> {
+    const mentionedUsernames = this.mentionParserService.extractUsernames(content);
+    const mentionedUsers =
+      await this.usersService.findByUsernamesCaseInsensitive(mentionedUsernames);
+
+    await this.commentMentionsRepository.delete({
+      comment: { id: comment.id },
+    });
+
+    if (mentionedUsers.length === 0) {
+      return [];
+    }
+
+    await this.commentMentionsRepository.save(
+      mentionedUsers.map((user) =>
+        this.commentMentionsRepository.create({
+          comment: { id: comment.id },
+          user: { id: user.id },
+        }),
+      ),
+    );
+
+    return mentionedUsers;
   }
 }

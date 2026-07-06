@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { CommentMention } from '../comments/comment-mention.entity';
 import { AuditAction } from '../common/enums/audit-action.enum';
 import { AuditActor } from '../common/enums/audit-actor.enum';
 import { AuditEntityType } from '../common/enums/audit-entity-type.enum';
@@ -28,6 +29,8 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(CommentMention)
+    private readonly commentMentionsRepository: Repository<CommentMention>,
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
@@ -73,6 +76,41 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  async findByUsernamesCaseInsensitive(usernames: string[]): Promise<User[]> {
+    if (usernames.length === 0) {
+      return [];
+    }
+
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.username) IN (:...usernames)', {
+        usernames: usernames.map((username) => username.toLowerCase()),
+      })
+      .orderBy('user.id', 'ASC')
+      .getMany();
+  }
+
+  async findMentionedComments(userId: number): Promise<CommentMention[]> {
+    await this.findById(userId);
+
+    return this.commentMentionsRepository.find({
+      where: { user: { id: userId } },
+      relations: {
+        comment: {
+          mentions: {
+            user: true,
+          },
+        },
+        user: true,
+      },
+      order: {
+        comment: {
+          createdAt: 'DESC',
+        },
+      },
+    });
   }
 
   async update(
